@@ -1,0 +1,138 @@
+{
+    "Description": "TT-RSS AMI",
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "KeyName": {
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "home-account"
+        },
+        "DatabaseBackupBucketSlashFile": {
+            "Type": "String",
+            "Default": "blog-deploy/ttrss.sql.gz",
+            "AllowedPattern": ".+/.+",
+            "Description": "bucket/file. Instance will be granted access to read get this file"
+        },
+        "Vpc": {
+            "Type": "AWS::EC2::VPC::Id",
+            "Default": "vpc-a8f93ccd"
+        },
+        "PublicSubnet": {
+            "Type": "AWS::EC2::Subnet::Id",
+            "Default": "subnet-969c4df3"
+        }
+    },
+    "Mappings": {
+        "RegionMap": {
+            "us-west-2": {
+                "AMI": "ami-63b25203"
+            }
+        }
+    },
+    "Resources": {
+        "ttrss": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "InstanceType": "t2.nano",
+                "IamInstanceProfile": {
+                    "Ref": "InstanceProfile"
+                },
+                "KeyName": {"Ref": "KeyName"},
+                "NetworkInterfaces": [ {
+                  "AssociatePublicIpAddress": "true",
+                  "DeviceIndex": "0",
+                  "GroupSet": [{ "Ref" : "RssSecurityGroup" }],
+                  "SubnetId": { "Ref" : "PublicSubnet" }
+                } ],
+                "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+                     "#!/bin/sh\n",
+                     "# Get all packages\n",
+                     "yum update -y\n",
+                     "yum remove -y php php-cli httpd-tools httpd php-common\n",
+                     "yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd # mysql-server\n",
+                     "git clone https://tt-rss.org/git/tt-rss.git /var/tt-rss\n",
+                     "aws s3 cp s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, " /tmp\n"
+                ]]}}
+            }
+        },
+        "RssSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allow HTTPS",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "443",
+                        "ToPort": "443",
+                        "IpProtocol": "TCP"
+                    }
+                ],
+                "VpcId": {"Ref": "Vpc"}
+            }
+        },
+        "S3Role": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/"
+            }
+        },
+        "RolePolicies": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "s3read",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetObject"
+                            ],
+                            "Resource": [
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "DatabaseBackupBucketSlashFile"}]]}
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "S3Role"
+                    }
+                ]
+            }
+        },
+        "InstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "S3Role"
+                    }
+                ]
+            }
+        }
+    }
+}
