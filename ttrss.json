@@ -26,6 +26,12 @@
             "Type": "AWS::EC2::Subnet::Id",
             "Default": "subnet-969c4df3"
         },
+        "AllocationId": {
+            "Type": "String",
+            "Default": "eipalloc-8fa851eb",
+            "AllowedPattern": "aipalloc-.*",
+            "Description": "Allocation id for elastic IP address"
+        },
         "DBRootPass": { "Type": "String"},
         "DBUser": { "Type": "String" },
         "DBPass": { "Type": "String" }
@@ -56,7 +62,7 @@
                 },
                 "KeyName": {"Ref": "KeyName"},
                 "NetworkInterfaces": [ {
-                  "AssociatePublicIpAddress": "true",
+                  "AssociatePublicIpAddress": "false",
                   "DeviceIndex": "0",
                   "GroupSet": [{ "Ref" : "RssSecurityGroup" }],
                   "SubnetId": { "Ref" : "PublicSubnet" }
@@ -171,6 +177,13 @@
                     }
                 ]
             }
+        },
+        "EIP": {
+           "Type": "AWS::EC2::EIPAssociation",
+           "Properties": {
+              "AllocationId": {"Ref": "AllocationId"},
+              "InstanceId": {"Ref": "ttrss"},
+           }
         }
     }
 }
