@@ -8,7 +8,7 @@
         },
         "DatabaseBackupBucketSlashFile": {
             "Type": "String",
-            "Default": "blog-deploy/ttrss.sql.gz",
+            "Default": "ttrss/ttrss.sql.gz",
             "AllowedPattern": ".+/.+",
             "Description": "bucket/file. Instance will be granted access to read get this file"
         },
