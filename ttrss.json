@@ -12,6 +12,12 @@
             "AllowedPattern": ".+/.+",
             "Description": "bucket/file. Instance will be granted access to read get this file"
         },
+        "ConfigBackupBucketSlashFile": {
+            "Type": "String",
+            "Default": "ttrss/config.php",
+            "AllowedPattern": ".+/.+",
+            "Description": "bucket/file. Instance will be granted access to read get this file"
+        },
         "Vpc": {
             "Type": "AWS::EC2::VPC::Id",
             "Default": "vpc-a8f93ccd"
@@ -19,7 +25,10 @@
         "PublicSubnet": {
             "Type": "AWS::EC2::Subnet::Id",
             "Default": "subnet-969c4df3"
-        }
+        },
+        "DBRootPass": { "Type": "String"},
+        "DBUser": { "Type": "String" },
+        "DBPass": { "Type": "String" }
     },
     "Mappings": {
         "RegionMap": {
@@ -57,9 +66,25 @@
                      "# Get all packages\n",
                      "yum update -y\n",
                      "yum remove -y php php-cli httpd-tools httpd php-common\n",
-                     "yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd # mysql-server\n",
+                     "#php55-mysql missing",
+                     "yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd docker mysql # client only\n",
                      "git clone https://tt-rss.org/git/tt-rss.git /var/tt-rss\n",
-                     "aws s3 cp s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, " /tmp\n"
+                     "aws s3 cp s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, " /tmp\n",
+                     "service docker start\n",
+                     "chkconfig docker on\n",
+                     "docker pull mariadb\n",
+                     "aws s3 cp s3://", {"Ref": "ConfigBackupBucketSlashFile"}, " /var/tt-rss\n",
+                     "docker run --name mariadb -e MYSQL_ROOT_PASSWORD=", {"Ref": "DBRootPass"}, " -d mariadb:latest\n",
+                     "export dbip=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' mariadb)\n",
+                     "sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php\n",
+                     "sleep 10 # wait for default db to be created\n",
+                     "",
+                     "",
+                     "",
+                     "",
+                     "service httpd start\n",
+                     "chkconfig httpd on\n",
+                     ""
                 ]]}}
             }
         },
@@ -111,7 +136,8 @@
                                 "s3:GetObject"
                             ],
                             "Resource": [
-                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "DatabaseBackupBucketSlashFile"}]]}
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "DatabaseBackupBucketSlashFile"}]]},
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "ConfigBackupBucketSlashFile"}]]}
                             ]
                         }
                     ]
