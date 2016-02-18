@@ -83,7 +83,7 @@
                      "mysql -u root -h $dbip -e 'CREATE DATABASE ttrss;' --password='", {"Ref": "DBRootPass"}, "'\n",
                      "# need to create a temporary file as the memory usage was too much for a t2.nano \n",
                      "aws s3 cp s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, " - | zcat > ttrss.sql \n",
-                     "mysql -u root -h $dbip -D ttrss --password='", {"Ref": "DBRootPass"}, "' > ttrss.sql \n",
+                     "mysql -u root -h $dbip -D ttrss --password='", {"Ref": "DBRootPass"}, "' < ttrss.sql \n",
                      "rm ttrss.sql \n",
                      "# The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.* \n",
                      "mysql -u root -h $dbip -e \"GRANT ALL PRIVILEGES ON ttrss . * TO '", {"Ref": "DBUser"}, "'@'%';\" --password='", {"Ref": "DBRootPass"}, "'\n",
