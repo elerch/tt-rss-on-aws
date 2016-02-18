@@ -1,0 +1,13 @@
+#!/bin/sh
+if [ "$#" -ne 3 ];
+  then echo "usage: create dbuser dbpass dbrootpass"
+  exit 1
+fi
+
+aws cloudformation create-stack \
+  --stack-name ttrss \
+  --template-body file://ttrss.json \
+  --capabilities CAPABILITY_IAM \
+  --parameters ParameterKey=DBUser,ParameterValue=$1 \
+               ParameterKey=DBPass,ParameterValue=$2 \
+               ParameterKey=DBRootPass,ParameterValue=$3
