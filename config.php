@@ -181,8 +181,8 @@
 	// *** Other settings (less important) ***
 	// ***************************************
 
-	define('CHECK_FOR_NEW_VERSION', true);
-	// Check for new versions of tt-rss automatically.
+	define('CHECK_FOR_UPDATES', true);
+	// Check for updates automatically if running Git version
 
 	define('ENABLE_GZIP_OUTPUT', false);
 	// Selectively gzip output to improve wire performance. This requires
