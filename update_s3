@@ -1,0 +1,5 @@
+#!/bin/sh
+aws s3 cp reader_daemon s3://ttrss/reader_daemon
+aws s3 cp ssl.conf s3://ttrss/ssl.conf
+aws s3 cp config.php s3://ttrss/config.php
+
