@@ -44,6 +44,10 @@
             "AllowedPattern": "eipalloc-.*",
             "Description": "Allocation id for elastic IP address"
         },
+        "AvailabilityZone": {
+            "Type": "String",
+            "Default": "us-west-2b"
+        },
         "DBRootPass": { "Type": "String"},
         "DBUser": { "Type": "String" },
         "DBPass": { "Type": "String" }
@@ -69,6 +73,7 @@
                     ]
                 },
                 "InstanceType": "t2.nano",
+                "AvailabilityZone": {"Ref": "AvailabilityZone"},
                 "IamInstanceProfile": {
                     "Ref": "InstanceProfile"
                 },
