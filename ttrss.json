@@ -30,6 +30,18 @@
             "AllowedPattern": ".+/.+",
             "Description": "bucket/file. Instance will be granted access to read get this file"
         },
+        "HttpdConfigBucketSlashFile": {
+            "Type": "String",
+            "Default": "ttrss/reduce_memory.conf",
+            "AllowedPattern": ".+/.+",
+            "Description": "bucket/file. Instance will be granted access to read get this file"
+        },
+        "BaseConfigBucketSlashFile": {
+            "Type": "String",
+            "Default": "ttrss/00-base.conf",
+            "AllowedPattern": ".+/.+",
+            "Description": "bucket/file. Instance will be granted access to read get this file"
+        },
         "Vpc": {
             "Type": "AWS::EC2::VPC::Id",
             "Default": "vpc-a8f93ccd"
@@ -108,6 +120,13 @@
                      "pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export cache/js feed-icons lock; popd\n",
                      "# Paper theme\n",
                      "curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | tar xz && mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && rm -rf tt-rss-theme-paper-master/\n",
+                     "echo Removing unneeded apache modules, configure for reduced memory\n",
+                     "pushd /etc/httpd\n",
+                     "aws s3 cp s3://", {"Ref": "HttpdConfigBucketSlashFile"}, " conf.d/\n",
+                     "cd conf.modules.d\n",
+                     "rm 00-dav.conf 00.lua.conf 00-proxy.conf 01-cgi.conf\n",
+                     "aws s3 cp s3://", {"Ref": "BaseConfigBucketSlashFile"}, " 00-base.conf\n",
+                     "popd\n",
                      "echo Loading and configuring database\n",
                      "# wait for default db to be created\n",
                      "until mysql -u root -h $dbip -e \"CREATE USER '", {"Ref": "DBUser"}, "'@'%' IDENTIFIED BY '", {"Ref": "DBPass"}, "';\" --password='", {"Ref": "DBRootPass"}, "'; do echo retrying; sleep 5; done\n",
@@ -240,6 +259,8 @@
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "DatabaseBackupBucketSlashFile"}]]},
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "ConfigBackupBucketSlashFile"}]]},
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "SslConfigBucketSlashFile"}]]},
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "BaseConfigBucketSlashFile"}]]},
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "HttpdConfigBucketSlashFile"}]]},
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "ReaderBucketSlashFile"}]]}
                             ]
                         }
