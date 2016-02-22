@@ -263,6 +263,15 @@
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "HttpdConfigBucketSlashFile"}]]},
                                 { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "ReaderBucketSlashFile"}]]}
                             ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:PutObject"
+                            ],
+                            "Resource": [
+                                { "Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "DatabaseBackupBucketSlashFile"}]]}
+                            ]
                         }
                     ]
                 },
