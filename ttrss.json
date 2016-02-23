@@ -183,7 +183,7 @@
                      "\n",
                      "echo Adding cron jobs for db backups to s3 and ssl cert renewal\n",
                      "# DB Backups\n",
-                     "echo \"\n",
+                     "echo \"",
                      "#!/bin/sh\n",
                      "service stop reader\n",
                      "mysqldump -u ", {"Ref": "DBUser"}, " -h $dbip --password='", {"Ref": "DBRootPass"}, "' --opt ttrss > ttrss.sql\n",
@@ -302,3 +302,4 @@
         }
     }
 }
+
