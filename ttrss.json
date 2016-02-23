@@ -187,7 +187,7 @@
                      "#!/bin/sh\n",
                      "service reader stop\n",
                      "mysqldump -u ", {"Ref": "DBUser"}, " -h $dbip --password='", {"Ref": "DBPass"}, "' --opt ttrss > ttrss.sql\n",
-                     "gzip -q ttrss.sql\n",
+                     "gzip -f ttrss.sql\n",
                      "aws s3 cp ttrss.sql.gz s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, "\n",
                      "service start reader\n",
                      "\" > /opt/snapshot && chmod 755 /opt/snapshot\n",
