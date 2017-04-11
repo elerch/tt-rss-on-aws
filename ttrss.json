@@ -153,7 +153,7 @@
                      "rm -rf acmetool*\n",
                      "echo '\n",
                      "\"acme-enter-email\": \"lobo@lerch.org\"\n",
-                     "\"acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf\": true\n",
+                     "\"acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf\": true\n",
                      "# \"acmetool-quickstart-choose-server\": https://acme-staging.api.letsencrypt.org/directory\n",
                      "\"acmetool-quickstart-choose-server\": https://acme-v01.api.letsencrypt.org/directory\n",
                      "# \"acmetool-quickstart-choose-method\": redirector\n",
