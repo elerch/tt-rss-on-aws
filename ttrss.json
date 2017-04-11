@@ -107,7 +107,7 @@
                      "service docker start\n",
                      "chkconfig docker on\n",
                      "docker pull mariadb\n",
-                     "docker run --name mariadb -e MYSQL_ROOT_PASSWORD=", {"Ref": "DBRootPass"}, " -d mariadb:latest\n",
+                     "docker run --memory 400M --name mariadb -e MYSQL_ROOT_PASSWORD=", {"Ref": "DBRootPass"}, " -d mariadb:latest\n",
                      "echo Getting objects from S3\n",
                      "aws s3 cp s3://", {"Ref": "ConfigBackupBucketSlashFile"}, " /var/tt-rss\n",
                      "aws s3 cp s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, " - | zcat > ttrss.sql \n",
