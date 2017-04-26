@@ -191,7 +191,7 @@
                      "gzip -f ttrss.sql\n",
                      "# du command ended up blank - getting chopped in cfn? \n",
                      "[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, "\n",
-                     "service start reader\n",
+                     "service reader start\n",
                      "\" > /opt/snapshot && chmod 755 /opt/snapshot\n",
                      "# 11am gmt = 3am Pacific\n",
                      "(crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab -\n",
