@@ -187,6 +187,7 @@
                      "#!/bin/sh\n",
                      "service reader stop\n",
                      "mysqldump -u ", {"Ref": "DBUser"}, " -h $dbip --password='", {"Ref": "DBPass"}, "' --opt ttrss > ttrss.sql\n",
+                     "docker stop mariadb; docker start mariadb # Docker known to leak over time - restart\n",
                      "gzip -f ttrss.sql\n",
                      "[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz s3://", {"Ref": "DatabaseBackupBucketSlashFile"}, "\n",
                      "service start reader\n",
