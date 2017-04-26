@@ -2,9 +2,6 @@
 Description: TT-RSS AMI
 AWSTemplateFormatVersion: '2010-09-09'
 Parameters:
-  KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Default: home-account
   DatabaseBackupBucketSlashFile:
     Type: String
     Default: ttrss/ttrss.sql.gz
@@ -12,29 +9,18 @@ Parameters:
     Description: bucket/file. Instance will be granted access to read get this file
   ConfigBackupBucketSlashFile:
     Type: String
-    Default: ttrss/config.php
+    Default: ttrss/configs-and-scripts.tgz
     AllowedPattern: ".+/.+"
     Description: bucket/file. Instance will be granted access to read get this file
-  SslConfigBucketSlashFile:
+  DBRootPass:
     Type: String
-    Default: ttrss/ssl.conf
-    AllowedPattern: ".+/.+"
-    Description: bucket/file. Instance will be granted access to read get this file
-  ReaderBucketSlashFile:
+  DBUser:
     Type: String
-    Default: ttrss/reader_daemon
-    AllowedPattern: ".+/.+"
-    Description: bucket/file. Instance will be granted access to read get this file
-  HttpdConfigBucketSlashFile:
+  DBPass:
     Type: String
-    Default: ttrss/reduce_memory.conf
-    AllowedPattern: ".+/.+"
-    Description: bucket/file. Instance will be granted access to read get this file
-  BaseConfigBucketSlashFile:
-    Type: String
-    Default: ttrss/00-base.conf
-    AllowedPattern: ".+/.+"
-    Description: bucket/file. Instance will be granted access to read get this file
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: home-account
   Vpc:
     Type: AWS::EC2::VPC::Id
     Default: vpc-a8f93ccd
@@ -49,16 +35,17 @@ Parameters:
   AvailabilityZone:
     Type: String
     Default: us-west-2b
-  DBRootPass:
-    Type: String
-  DBUser:
-    Type: String
-  DBPass:
-    Type: String
 Mappings:
+  # We're switching to rkt here as docker is too memory intensive/leaky
+  # for a t2.nano. rkt **really** seems to want systemd, which isn't
+  # available in Amazon Linux. CoreOS is too much of a PITA to use as
+  # it's so container focused it's hard to log in and do any real testing/
+  # diagnostic work. This leaves us with arch, which will give us a good
+  # package manager/control, is now systemd-based, and for which there
+  # are good community AMIs. It's also a minimal distribution.
   RegionMap:
     us-west-2:
-      AMI: ami-63b25203
+      AMI: ami-3d7af85d # Arch 2017-03-01 x86_64 HVM EBS
 Resources:
   ttrss:
     Type: AWS::EC2::Instance
@@ -69,112 +56,51 @@ Resources:
       IamInstanceProfile: !Ref InstanceProfile
       KeyName: !Ref KeyName
       NetworkInterfaces:
-      - AssociatePublicIpAddress: 'false'
+      - AssociatePublicIpAddress: false
         DeviceIndex: '0'
         GroupSet: !Ref RssSecurityGroup
         SubnetId: !Ref PublicSubnet
       UserData: !Base64
         'Fn::Sub': |
-          #!/bin/sh\n"
-          echo Setting up packages
-          yum update -y
-          yum remove -y php php-cli httpd-tools httpd php-common php55-mysql
-          #php55-mysql missing
-          yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd docker mod24_ssl mysql # client only
-          git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
-          service docker start
-          chkconfig docker on
-          docker pull mariadb
-          docker run --memory 400M --name mariadb -e MYSQL_ROOT_PASSWORD=${DBRootPass} -d mariadb:latest
-          echo Getting objects from S3
-          aws s3 cp s3://${ConfigBackupBucketSlashFile} /var/tt-rss
-          aws s3 cp s3://${DatabaseBackupBucketSlashFile} - | zcat > ttrss.sql
-          echo Configuring application
-          export dbip=$(docker inspect --format ''{{ .NetworkSettings.IPAddress }}'' mariadb)
-          sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php
-          sed -i s/dbuserreplaceme/${DBUser}/ /var/tt-rss/config.php
-          sed -i s/dbpassreplaceme/${DBPass}/ /var/tt-rss/config.php
-          # TT-RSS permissions
-          pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export cache/js feed-icons lock; popd
-          # Paper theme\n"
-          curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | tar xz && mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && rm -rf tt-rss-theme-paper-master/
-          echo Removing unneeded apache modules, configure for reduced memory
-          pushd /etc/httpd
-          aws s3 cp s3://${HttpdConfigBucketSlashFile} conf.d/
-          cd conf.modules.d
-          rm 00-dav.conf 00.lua.conf 00-proxy.conf 01-cgi.conf
-          aws s3 cp s3://${BaseConfigBucketSlashFile} 00-base.conf
-          popd
-          echo Loading and configuring database
-          # wait for default db to be created
-          until mysql -u root -h $dbip -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';" --password='${DBRootPass}'; do echo retrying; sleep 5; done
-          mysql -u root -h $dbip -e 'CREATE DATABASE ttrss;' --password='${DBRootPass}'
-          # need to create a temporary file as the memory usage was too much
-          # for a t2.nano
-          mysql -u root -h $dbip -D ttrss --password='${DBRootPass}' < ttrss.sql
-          rm ttrss.sql
-          # The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.*
-          mysql -u root -h $dbip -e "GRANT ALL PRIVILEGES ON ttrss . * TO '${DBUser}'@'%';" --password='${DBRootPass}'
-          mysql -u root -h $dbip -e "FLUSH PRIVILEGES;" --password='${DBRootPass}'
-          echo Configuring ssl/procuring cert
+          #!/bin/sh
+          # We'll need an updated keyring before we can do anything else
+          echo Bringing rolling release up to date
+          pacman -S archlinux-keyring --noconfirm
+          rm /etc/ssl/certs/ca-certificates.crt # system update may fail without cert removal
+          pacman -Syu --noconfirm
+          # Required operational packages:
+          # rkt (containers)
+          # python2-pip (to install awscli and ps-mem)
+          echo Installing required operational packages
+          pacman -S rkt python2-pip --noconfirm
+          pip2 install awscli
+          mkdir /config
+          # Untar config files and startup script to run after reboot
+          echo Copying configuration from s3://${ConfigBackupBucketSlashFile}
+          aws s3 cp s3://${ConfigBackupBucketSlashFile} - | tar --directory=/config xz
+          echo Setting up startup service and rebooting
           echo '
-            Alias "/.well-known/acme-challenge/" "/var/run/acme/acme-challenge/"
-            <Directory "/var/run/acme/acme-challenge">
-              AllowOverride None
-              Options None
-              # If using Apache 2.4+
-              Require all granted
-            </Directory>
-            '> /etc/httpd/conf.d/acme-challenge.conf
-          url=$(curl -s https://api.github.com/repos/hlandau/acme/releases | grep browser_download_url | grep linux_amd64_cgo.tar.gz | head -n 1 | cut -d '"' -f 4)
-          curl -sL $url | tar -xz
-          mv acmetool*/bin/* /opt
-          rm -rf acmetool*
-          echo '
-          acme-enter-email": "lobo@lerch.org"
-          acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf": true
-          acmetool-quickstart-choose-server": https://acme-v01.api.letsencrypt.org/directory
-          acmetool-quickstart-choose-method": listen
-          acmetool-quickstart-webroot-path": "/var/www/.well-known/acme-challenge"
-          acmetool-quickstart-complete": true
-          acmetool-quickstart-install-cronjob": false
-          acmetool-quickstart-install-haproxy-script": true
-          acmetool-quickstart-key-type": ecdsa
-          acmetool-quickstart-rsa-key-size": 4096
-          acmetool-quickstart-ecdsa-curve": nistp256
-          ' > /opt/response.yaml
-          /opt/acmetool want rss.lerch.org --batch --response-file /opt/response.yaml
-          aws s3 cp s3://${SslConfigBucketSlashFile} /etc/httpd/conf.d/ssl.conf
-          sed -i 's/\/var\/www\/html/\/var\/tt-rss/' /etc/httpd/conf/httpd.conf
-          echo Starting apache
-          service httpd start
-          chkconfig httpd on
-          echo setting up TT-RSS Update Daemon
-          aws s3 cp s3://${ReaderBucketSlashFile} /etc/init.d/reader
-          chmod 755 /etc/init.d/reader
-          chkconfig reader on
-          service reader start
-          echo Adding cron jobs for db backups to s3 and ssl cert renewal
-          # DB Backups
-          echo "
-            #!/bin/sh
-            service reader stop
-            mysqldump -u ${DBUser} -h $dbip --password='${DBPass}' --opt ttrss > ttrss.sql
-            docker stop mariadb; docker start mariadb # Docker known to leak over time - restart
-            gzip -f ttrss.sql
-            # du command ended up blank - getting chopped in cfn? 
-            [ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz
-              s3://${DatabaseBackupBucketSlashFile}
-            service reader start
-            " > /opt/snapshot && chmod 755 /opt/snapshot
-          # 11am gmt = 3am Pacific
-          (crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab
-          # SSL Certificate renewal
-          # Change acmetool response file to switch to webroot technique 
-          sed -i s/listen/webroot/ /opt/response.yaml
-          (crontab -l 2>/dev/null; echo '0 11 * * * /opt/acmetool reconcile --batch --response-file /opt/response.yaml') | crontab -
-          docker start mariadb #memory issues are stopping this container. Restart
-          echo done
+          DatabaseBackupBucketSlashFile=${DatabaseBackupBucketSlashFile}
+          ConfigBackupBucketSlashFile=${ConfigBackupBucketSlashFile}
+          DBRootPass=${DBRootPass}
+          DBUser=${DBUser}
+          DBPass=${DBPass}' > /cfn-params.sh
+          chmod 400 /cfn-params.sh
+          # Do the rest in a script after reboot
+          echo ' 
+          [Unit]
+          Description=Bootstraps the remaining system
+
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/bash -c "/config/bootstrap /cfn-params.sh"
+          RemainAfterExit=true
+          StandardOutput=journal
+
+          [Install]
+          WantedBy=multi-user.target' > /usr/lib/systemd/system/bootstrap.service
+          systemctl enable bootstrap
+          shutdown -r now
   RssSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
