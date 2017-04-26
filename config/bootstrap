@@ -1,0 +1,116 @@
+#!/bin/sh
+# This will run as root
+# $1 will be the path of the file containing needed parameters
+# This script will run at every boot, so it is important to exit before
+# re-running (unless we want to run every time)
+[ -f /bootstrap-completed ] && exit 0
+date > /bootstrap-completed
+
+# Source our important environment variables
+source $1
+
+# DBRootPass
+# DBUser
+# DBPass
+# DatabaseBackupBucketSlashFile
+
+# For diagnostics/ssh etc
+# ps-mem (for looking at memory utilization beyond ps)
+# rxvt-unicode-terminfo for ability to use the terminal over ssh from rxvt
+pacman -S ps-mem rxvt-unicode-terminfo --noconfirm
+pip2 install ps-mem
+
+git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
+service docker start
+chkconfig docker on
+docker pull mariadb
+docker run --memory 400M --name mariadb -e MYSQL_ROOT_PASSWORD=${DBRootPass} -d mariadb:latest
+echo Getting objects from S3
+aws s3 cp s3://${ConfigBackupBucketSlashFile} /var/tt-rss
+aws s3 cp s3://${DatabaseBackupBucketSlashFile} - | zcat > ttrss.sql
+echo Configuring application
+export dbip=$(docker inspect --format ''{{ .NetworkSettings.IPAddress }}'' mariadb)
+sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php
+sed -i s/dbuserreplaceme/${DBUser}/ /var/tt-rss/config.php
+sed -i s/dbpassreplaceme/${DBPass}/ /var/tt-rss/config.php
+# TT-RSS permissions
+pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export cache/js feed-icons lock; popd
+# Paper theme\n"
+curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | tar xz && mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && rm -rf tt-rss-theme-paper-master/
+echo Removing unneeded apache modules, configure for reduced memory
+pushd /etc/httpd
+aws s3 cp s3://${HttpdConfigBucketSlashFile} conf.d/
+cd conf.modules.d
+rm 00-dav.conf 00.lua.conf 00-proxy.conf 01-cgi.conf
+aws s3 cp s3://${BaseConfigBucketSlashFile} 00-base.conf
+popd
+echo Loading and configuring database
+# wait for default db to be created
+until mysql -u root -h $dbip -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';" --password='${DBRootPass}'; do echo retrying; sleep 5; done
+mysql -u root -h $dbip -e 'CREATE DATABASE ttrss;' --password='${DBRootPass}'
+# need to create a temporary file as the memory usage was too much
+# for a t2.nano
+mysql -u root -h $dbip -D ttrss --password='${DBRootPass}' < ttrss.sql
+rm ttrss.sql
+# The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.*
+mysql -u root -h $dbip -e "GRANT ALL PRIVILEGES ON ttrss . * TO '${DBUser}'@'%';" --password='${DBRootPass}'
+mysql -u root -h $dbip -e "FLUSH PRIVILEGES;" --password='${DBRootPass}'
+echo Configuring ssl/procuring cert
+echo '
+  Alias "/.well-known/acme-challenge/" "/var/run/acme/acme-challenge/"
+  <Directory "/var/run/acme/acme-challenge">
+    AllowOverride None
+    Options None
+    # If using Apache 2.4+
+    Require all granted
+  </Directory>
+  '> /etc/httpd/conf.d/acme-challenge.conf
+url=$(curl -s https://api.github.com/repos/hlandau/acme/releases | grep browser_download_url | grep linux_amd64_cgo.tar.gz | head -n 1 | cut -d '"' -f 4)
+curl -sL $url | tar -xz
+mv acmetool*/bin/* /opt
+rm -rf acmetool*
+echo '
+acme-enter-email": "lobo@lerch.org"
+acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf": true
+acmetool-quickstart-choose-server": https://acme-v01.api.letsencrypt.org/directory
+acmetool-quickstart-choose-method": listen
+acmetool-quickstart-webroot-path": "/var/www/.well-known/acme-challenge"
+acmetool-quickstart-complete": true
+acmetool-quickstart-install-cronjob": false
+acmetool-quickstart-install-haproxy-script": true
+acmetool-quickstart-key-type": ecdsa
+acmetool-quickstart-rsa-key-size": 4096
+acmetool-quickstart-ecdsa-curve": nistp256
+' > /opt/response.yaml
+/opt/acmetool want rss.lerch.org --batch --response-file /opt/response.yaml
+aws s3 cp s3://${SslConfigBucketSlashFile} /etc/httpd/conf.d/ssl.conf
+sed -i 's/\/var\/www\/html/\/var\/tt-rss/' /etc/httpd/conf/httpd.conf
+echo Starting apache
+service httpd start
+chkconfig httpd on
+echo setting up TT-RSS Update Daemon
+aws s3 cp s3://${ReaderBucketSlashFile} /etc/init.d/reader
+chmod 755 /etc/init.d/reader
+chkconfig reader on
+service reader start
+echo Adding cron jobs for db backups to s3 and ssl cert renewal
+# DB Backups
+echo "
+  #!/bin/sh
+  service reader stop
+  mysqldump -u ${DBUser} -h $dbip --password='${DBPass}' --opt ttrss > ttrss.sql
+  docker stop mariadb; docker start mariadb # Docker known to leak over time - restart
+  gzip -f ttrss.sql
+  # du command ended up blank - getting chopped in cfn? 
+  [ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz
+    s3://${DatabaseBackupBucketSlashFile}
+  service reader start
+  " > /opt/snapshot && chmod 755 /opt/snapshot
+# 11am gmt = 3am Pacific
+(crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab
+# SSL Certificate renewal
+# Change acmetool response file to switch to webroot technique 
+sed -i s/listen/webroot/ /opt/response.yaml
+(crontab -l 2>/dev/null; echo '0 11 * * * /opt/acmetool reconcile --batch --response-file /opt/response.yaml') | crontab -
+docker start mariadb #memory issues are stopping this container. Restart
+echo done
