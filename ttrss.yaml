@@ -63,311 +63,118 @@ Resources:
   ttrss:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId:
-        Fn::FindInMap:
-        - RegionMap
-        - Ref: AWS::Region
-        - AMI
+      ImageId: !FindInMap [ RegionMap, !Ref 'AWS::Region', AMI ]
       InstanceType: t2.nano
-      AvailabilityZone:
-        Ref: AvailabilityZone
-      IamInstanceProfile:
-        Ref: InstanceProfile
-      KeyName:
-        Ref: KeyName
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !Ref KeyName
       NetworkInterfaces:
       - AssociatePublicIpAddress: 'false'
         DeviceIndex: '0'
-        GroupSet:
-        - Ref: RssSecurityGroup
-        SubnetId:
-          Ref: PublicSubnet
-      UserData:
-        Fn::Base64:
-          Fn::Join:
-          - ''
-          - - "#!/bin/sh\n"
-            - 'echo Setting up packages
-
-'
-            - 'yum update -y
-
-'
-            - 'yum remove -y php php-cli httpd-tools httpd php-common php55-mysql
-
-'
-            - "#php55-mysql missing\n"
-            - 'yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd docker
-              mod24_ssl mysql # client only
-
-'
-            - 'git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
-
-'
-            - 'service docker start
-
-'
-            - 'chkconfig docker on
-
-'
-            - 'docker pull mariadb
-
-'
-            - docker run --memory 400M --name mariadb -e MYSQL_ROOT_PASSWORD=
-            - Ref: DBRootPass
-            - " -d mariadb:latest\n"
-            - 'echo Getting objects from S3
-
-'
-            - aws s3 cp s3://
-            - Ref: ConfigBackupBucketSlashFile
-            - " /var/tt-rss\n"
-            - aws s3 cp s3://
-            - Ref: DatabaseBackupBucketSlashFile
-            - " - | zcat > ttrss.sql \n"
-            - 'echo Configuring application
-
-'
-            - 'export dbip=$(docker inspect --format ''{{ .NetworkSettings.IPAddress
-              }}'' mariadb)
-
-'
-            - 'sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php
-
-'
-            - sed -i s/dbuserreplaceme/
-            - Ref: DBUser
-            - "/ /var/tt-rss/config.php\n"
-            - sed -i s/dbpassreplaceme/
-            - Ref: DBPass
-            - "/ /var/tt-rss/config.php\n"
-            - "# TT-RSS permissions \n"
-            - 'pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export
-              cache/js feed-icons lock; popd
-
-'
-            - "# Paper theme\n"
-            - 'curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz
-              | tar xz && mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ &&
-              rm -rf tt-rss-theme-paper-master/
-
-'
-            - 'echo Removing unneeded apache modules, configure for reduced memory
-
-'
-            - 'pushd /etc/httpd
-
-'
-            - aws s3 cp s3://
-            - Ref: HttpdConfigBucketSlashFile
-            - " conf.d/\n"
-            - 'cd conf.modules.d
-
-'
-            - 'rm 00-dav.conf 00.lua.conf 00-proxy.conf 01-cgi.conf
-
-'
-            - aws s3 cp s3://
-            - Ref: BaseConfigBucketSlashFile
-            - " 00-base.conf\n"
-            - 'popd
-
-'
-            - 'echo Loading and configuring database
-
-'
-            - "# wait for default db to be created\n"
-            - until mysql -u root -h $dbip -e "CREATE USER '
-            - Ref: DBUser
-            - "'@'%' IDENTIFIED BY '"
-            - Ref: DBPass
-            - ''';" --password='''
-            - Ref: DBRootPass
-            - "'; do echo retrying; sleep 5; done\n"
-            - mysql -u root -h $dbip -e 'CREATE DATABASE ttrss;' --password='
-            - Ref: DBRootPass
-            - "'\n"
-            - "# need to create a temporary file as the memory usage was too much
-              for a t2.nano \n"
-            - mysql -u root -h $dbip -D ttrss --password='
-            - Ref: DBRootPass
-            - "' < ttrss.sql \n"
-            - "rm ttrss.sql \n"
-            - "# The schema is ttrss regardless of the user, so the grant should be
-              hard coded to ttrss.* \n"
-            - mysql -u root -h $dbip -e "GRANT ALL PRIVILEGES ON ttrss . * TO '
-            - Ref: DBUser
-            - '''@''%'';" --password='''
-            - Ref: DBRootPass
-            - "'\n"
-            - mysql -u root -h $dbip -e "FLUSH PRIVILEGES;" --password='
-            - Ref: DBRootPass
-            - "'\n"
-            - "echo Configuring ssl/procuring cert \n"
-            - 'echo ''
-
-'
-            - 'Alias "/.well-known/acme-challenge/" "/var/run/acme/acme-challenge/"
-
-'
-            - '<Directory "/var/run/acme/acme-challenge">
-
-'
-            - "  AllowOverride None\n"
-            - "  Options None\n"
-            - "  # If using Apache 2.4+\n"
-            - "  Require all granted\n"
-            - "</Directory>\n"
-            - "'> /etc/httpd/conf.d/acme-challenge.conf\n"
-            - 'url=$(curl -s https://api.github.com/repos/hlandau/acme/releases |
-              grep browser_download_url | grep linux_amd64_cgo.tar.gz | head -n 1
-              | cut -d ''"'' -f 4)
-
-'
-            - 'curl -sL $url | tar -xz
-
-'
-            - 'mv acmetool*/bin/* /opt
-
-'
-            - 'rm -rf acmetool*
-
-'
-            - 'echo ''
-
-'
-            - '"acme-enter-email": "lobo@lerch.org"
-
-'
-            - '"acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf":
-              true
-
-'
-            - '# "acmetool-quickstart-choose-server": https://acme-staging.api.letsencrypt.org/directory
-
-'
-            - '"acmetool-quickstart-choose-server": https://acme-v01.api.letsencrypt.org/directory
-
-'
-            - '# "acmetool-quickstart-choose-method": redirector
-
-'
-            - '"acmetool-quickstart-choose-method": listen
-
-'
-            - '# "acmetool-quickstart-choose-method": webroot
-
-'
-            - '"acmetool-quickstart-webroot-path": "/var/www/.well-known/acme-challenge"
-
-'
-            - '"acmetool-quickstart-complete": true
-
-'
-            - '"acmetool-quickstart-install-cronjob": false
-
-'
-            - '"acmetool-quickstart-install-haproxy-script": true
-
-'
-            - '#"acmetool-quickstart-install-redirector-systemd": true
-
-'
-            - '"acmetool-quickstart-key-type": ecdsa
-
-'
-            - '"acmetool-quickstart-rsa-key-size": 4096
-
-'
-            - '"acmetool-quickstart-ecdsa-curve": nistp256
-
-'
-            - "' > /opt/response.yaml\n"
-            - "/opt/acmetool want rss.lerch.org --batch --response-file /opt/response.yaml\n"
-            - aws s3 cp s3://
-            - Ref: SslConfigBucketSlashFile
-            - " /etc/httpd/conf.d/ssl.conf\n"
-            - 'sed -i ''s/\/var\/www\/html/\/var\/tt-rss/'' /etc/httpd/conf/httpd.conf
-
-'
-            - 'echo Starting apache
-
-'
-            - 'service httpd start
-
-'
-            - 'chkconfig httpd on
-
-'
-            - 'echo setting up TT-RSS Update Daemon
-
-'
-            - aws s3 cp s3://
-            - Ref: ReaderBucketSlashFile
-            - " /etc/init.d/reader\n"
-            - 'chmod 755 /etc/init.d/reader
-
-'
-            - 'chkconfig reader on
-
-'
-            - 'service reader start
-
-'
-            - "\n"
-            - "\n"
-            - 'echo Adding cron jobs for db backups to s3 and ssl cert renewal
-
-'
-            - "# DB Backups\n"
-            - echo "
-            - "#!/bin/sh\n"
-            - 'service reader stop
-
-'
-            - 'mysqldump -u '
-            - Ref: DBUser
-            - " -h $dbip --password='"
-            - Ref: DBPass
-            - "' --opt ttrss > ttrss.sql\n"
-            - 'docker stop mariadb; docker start mariadb # Docker known to leak over
-              time - restart
-
-'
-            - 'gzip -f ttrss.sql
-
-'
-            - "# du command ended up blank - getting chopped in cfn? \n"
-            - "[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz
-              s3://"
-            - Ref: DatabaseBackupBucketSlashFile
-            - "\n"
-            - 'service reader start
-
-'
-            - "\" > /opt/snapshot && chmod 755 /opt/snapshot\n"
-            - "# 11am gmt = 3am Pacific\n"
-            - "(crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab
-              -\n"
-            - "\n"
-            - "\n"
-            - "# SSL Certificate renewal \n"
-            - "# Change acmetool response file to switch to webroot technique \n"
-            - 'sed -i s/listen/webroot/ /opt/response.yaml
-
-'
-            - "(crontab -l 2>/dev/null; echo '0 11 * * * /opt/acmetool reconcile --batch
-              --response-file /opt/response.yaml') | crontab -\n"
-            - 'docker start mariadb #memory issues are stopping this container. Restart
-
-'
-            - 'echo done
-
-'
-            - "\n"
-            - "\n"
-            - "\n"
-            - ''
+        GroupSet: !Ref RssSecurityGroup
+        SubnetId: !Ref PublicSubnet
+      UserData: !Base64
+        'Fn::Sub': |
+          #!/bin/sh\n"
+          echo Setting up packages
+          yum update -y
+          yum remove -y php php-cli httpd-tools httpd php-common php55-mysql
+          #php55-mysql missing
+          yum install -y git php55 php55-mysql php55-mbstring php55-mysqlnd docker mod24_ssl mysql # client only
+          git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
+          service docker start
+          chkconfig docker on
+          docker pull mariadb
+          docker run --memory 400M --name mariadb -e MYSQL_ROOT_PASSWORD=${DBRootPass} -d mariadb:latest
+          echo Getting objects from S3
+          aws s3 cp s3://${ConfigBackupBucketSlashFile} /var/tt-rss
+          aws s3 cp s3://${DatabaseBackupBucketSlashFile} - | zcat > ttrss.sql
+          echo Configuring application
+          export dbip=$(docker inspect --format ''{{ .NetworkSettings.IPAddress }}'' mariadb)
+          sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php
+          sed -i s/dbuserreplaceme/${DBUser}/ /var/tt-rss/config.php
+          sed -i s/dbpassreplaceme/${DBPass}/ /var/tt-rss/config.php
+          # TT-RSS permissions
+          pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export cache/js feed-icons lock; popd
+          # Paper theme\n"
+          curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | tar xz && mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && rm -rf tt-rss-theme-paper-master/
+          echo Removing unneeded apache modules, configure for reduced memory
+          pushd /etc/httpd
+          aws s3 cp s3://${HttpdConfigBucketSlashFile} conf.d/
+          cd conf.modules.d
+          rm 00-dav.conf 00.lua.conf 00-proxy.conf 01-cgi.conf
+          aws s3 cp s3://${BaseConfigBucketSlashFile} 00-base.conf
+          popd
+          echo Loading and configuring database
+          # wait for default db to be created
+          until mysql -u root -h $dbip -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';" --password='${DBRootPass}'; do echo retrying; sleep 5; done
+          mysql -u root -h $dbip -e 'CREATE DATABASE ttrss;' --password='${DBRootPass}'
+          # need to create a temporary file as the memory usage was too much
+          # for a t2.nano
+          mysql -u root -h $dbip -D ttrss --password='${DBRootPass}' < ttrss.sql
+          rm ttrss.sql
+          # The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.*
+          mysql -u root -h $dbip -e "GRANT ALL PRIVILEGES ON ttrss . * TO '${DBUser}'@'%';" --password='${DBRootPass}'
+          mysql -u root -h $dbip -e "FLUSH PRIVILEGES;" --password='${DBRootPass}'
+          echo Configuring ssl/procuring cert
+          echo '
+            Alias "/.well-known/acme-challenge/" "/var/run/acme/acme-challenge/"
+            <Directory "/var/run/acme/acme-challenge">
+              AllowOverride None
+              Options None
+              # If using Apache 2.4+
+              Require all granted
+            </Directory>
+            '> /etc/httpd/conf.d/acme-challenge.conf
+          url=$(curl -s https://api.github.com/repos/hlandau/acme/releases | grep browser_download_url | grep linux_amd64_cgo.tar.gz | head -n 1 | cut -d '"' -f 4)
+          curl -sL $url | tar -xz
+          mv acmetool*/bin/* /opt
+          rm -rf acmetool*
+          echo '
+          acme-enter-email": "lobo@lerch.org"
+          acme-agreement:https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf": true
+          acmetool-quickstart-choose-server": https://acme-v01.api.letsencrypt.org/directory
+          acmetool-quickstart-choose-method": listen
+          acmetool-quickstart-webroot-path": "/var/www/.well-known/acme-challenge"
+          acmetool-quickstart-complete": true
+          acmetool-quickstart-install-cronjob": false
+          acmetool-quickstart-install-haproxy-script": true
+          acmetool-quickstart-key-type": ecdsa
+          acmetool-quickstart-rsa-key-size": 4096
+          acmetool-quickstart-ecdsa-curve": nistp256
+          ' > /opt/response.yaml
+          /opt/acmetool want rss.lerch.org --batch --response-file /opt/response.yaml
+          aws s3 cp s3://${SslConfigBucketSlashFile} /etc/httpd/conf.d/ssl.conf
+          sed -i 's/\/var\/www\/html/\/var\/tt-rss/' /etc/httpd/conf/httpd.conf
+          echo Starting apache
+          service httpd start
+          chkconfig httpd on
+          echo setting up TT-RSS Update Daemon
+          aws s3 cp s3://${ReaderBucketSlashFile} /etc/init.d/reader
+          chmod 755 /etc/init.d/reader
+          chkconfig reader on
+          service reader start
+          echo Adding cron jobs for db backups to s3 and ssl cert renewal
+          # DB Backups
+          echo "
+            #!/bin/sh
+            service reader stop
+            mysqldump -u ${DBUser} -h $dbip --password='${DBPass}' --opt ttrss > ttrss.sql
+            docker stop mariadb; docker start mariadb # Docker known to leak over time - restart
+            gzip -f ttrss.sql
+            # du command ended up blank - getting chopped in cfn? 
+            [ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz
+              s3://${DatabaseBackupBucketSlashFile}
+            service reader start
+            " > /opt/snapshot && chmod 755 /opt/snapshot
+          # 11am gmt = 3am Pacific
+          (crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab
+          # SSL Certificate renewal
+          # Change acmetool response file to switch to webroot technique 
+          sed -i s/listen/webroot/ /opt/response.yaml
+          (crontab -l 2>/dev/null; echo '0 11 * * * /opt/acmetool reconcile --batch --response-file /opt/response.yaml') | crontab -
+          docker start mariadb #memory issues are stopping this container. Restart
+          echo done
   RssSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -377,8 +184,7 @@ Resources:
         FromPort: '443'
         ToPort: '443'
         IpProtocol: TCP
-      VpcId:
-        Ref: Vpc
+      VpcId: !Ref Vpc
   S3Role:
     Type: AWS::IAM::Role
     Properties:
@@ -401,50 +207,26 @@ Resources:
           Action:
           - s3:GetObject
           Resource:
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: DatabaseBackupBucketSlashFile
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: ConfigBackupBucketSlashFile
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: SslConfigBucketSlashFile
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: BaseConfigBucketSlashFile
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: HttpdConfigBucketSlashFile
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: ReaderBucketSlashFile
+          - !Sub arn:aws:s3:::${DatabaseBackupBucketSlashFile}
+          - !Sub arn:aws:s3:::${ConfigBackupBucketSlashFile}
+          - !Sub arn:aws:s3:::${SslConfigBucketSlashFile}
+          - !Sub arn:aws:s3:::${BaseConfigBucketSlashFile}
+          - !Sub arn:aws:s3:::${HttpdConfigBucketSlashFile}
+          - !Sub arn:aws:s3:::${ReaderBucketSlashFile}
         - Effect: Allow
           Action:
           - s3:PutObject
           Resource:
-          - Fn::Join:
-            - ''
-            - - 'arn:aws:s3:::'
-              - Ref: DatabaseBackupBucketSlashFile
+          - !Sub arn:aws:s3:::${DatabaseBackupBucketSlashFile}
       Roles:
       - Ref: S3Role
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Path: "/"
-      Roles:
-      - Ref: S3Role
+      Roles: !Ref S3Role
   EIP:
     Type: AWS::EC2::EIPAssociation
     Properties:
-      AllocationId:
-        Ref: AllocationId
-      InstanceId:
-        Ref: ttrss
+      AllocationId: !Ref AllocationId
+      InstanceId: !Ref ttrss
