@@ -1,11 +1,10 @@
 #!/bin/sh
 
 update=$(rkt prepare                             \
-  --net=host                                     \
   --volume ttrss,kind=host,source=/var/tt-rss    \
   --mount volume=ttrss,target=/var/ttrss         \
-  --dns=host                                     \
   docker://elerch/ttrss-update-daemon)
-nohup rkt run-prepared $update > /output/updater.out &
 
-echo $nginx
+nohup rkt run-prepared --net=host --dns=host $update > /output/updater.out &
+
+echo $update

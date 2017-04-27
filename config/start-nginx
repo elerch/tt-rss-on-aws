@@ -4,16 +4,14 @@ DOMAIN=$1
 GIT_EMAIL=$2
 
 nginx=$(rkt prepare                           \
-  --net=host                                  \
   --set-env=DOMAIN=$DOMAIN                    \
   --set-env=GIT_EMAIL=$GIT_EMAIL              \
   --set-env=WEBROOT=/var/www/html             \
   --volume www,kind=host,source=/var/tt-rss   \
   --mount volume=www,target=/var/www/html     \
-  --dns=host                                  \
   docker://richarvey/nginx-php-fpm )
 
-nohup rkt run-prepared $nginx > /output/nginx.out &
+nohup rkt run-prepared --net=host --dns=host $nginx > /output/nginx.out &
 sleep 5 # Let things settle a bit
 rkt enter $nginx /usr/bin/letsencrypt-setup
 echo $nginx
