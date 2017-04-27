@@ -40,6 +40,7 @@ $DIR/pull-ttrss /var/tt-rss
 dbip=$(rkt status $mariadb |grep -F networks|cut -d= -f3)
 
 echo Configuring application
+cp $DIR/config.php /var/tt-rss/
 sed -i "s/dbhostreplaceme/$dbip/g;
         s/dbuserreplaceme/${DBUser}/g;
         s/dbpassreplaceme/${DBPass}/g" /var/tt-rss/config.php
