@@ -89,7 +89,6 @@ Resources:
           DOMAIN=${Domain}
           EMAIL=${Email}
           DatabaseBackupBucketSlashFile=${DatabaseBackupBucketSlashFile}
-          ConfigBackupBucketSlashFile=${ConfigBackupBucketSlashFile}
           DBRootPass=${DBRootPass}
           DBUser=${DBUser}
           DBPass=${DBPass}' > /cfn-params.sh
