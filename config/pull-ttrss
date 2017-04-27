@@ -1,6 +1,6 @@
 #!/bin/sh
 
-git clone --depth 1 https://tt-rss.org/git/tt-rss.git $1
+git clone --depth 1 https://tt-rss.org/fox/tt-rss.git $1
 
 # TT-RSS permissions
 pushd $1 && \
