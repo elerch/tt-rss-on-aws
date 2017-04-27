@@ -29,7 +29,7 @@ rkt fetch --insecure-options=image docker://mariadb
 rkt fetch --insecure-options=image docker://elerch/ttrss-update-daemon
 mkdir /output
 mkdir /data
-$DIR/start-mariadb $DBRootPass
+mariadb=$($DIR/start-mariadb $DBRootPass)
 
 # Do some stuff while the DB cranks up for the first time
 pacman -S git --noconfirm
@@ -47,22 +47,22 @@ sed -i "s/dbhostreplaceme/$dbip/g;
 sed -i "s/dbhostreplaceme/$dbip/g;
         s/dbuserreplaceme/${DBUser}/g;
         s/dbpassreplaceme/${DBPass}/g;
-        s/s3locationreplaceme/${DatabaseBackupBucketSlashFile}/g" $DIR/backup
+        s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" $DIR/backup
 
 echo Loading and configuring database
-mysql -u root -h $dbip --password='${DBRootPass}' \
+mysql -u root -h $dbip --password="${DBRootPass}" \
   -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';"
-mysql -u root -h $dbip --password='${DBRootPass}' \
+mysql -u root -h $dbip --password="${DBRootPass}" \
   -e 'CREATE DATABASE ttrss;'
 # need to create a temporary file as the memory usage was too much
 # for a t2.nano
-aws s3 cp s3://${DatabaseBackupBucketSlashFile} - |tar xz
-mysql -u root -h $dbip -D ttrss --password='${DBRootPass}' < ttrss.sql
+aws s3 cp s3://${DatabaseBackupBucketSlashFile} - |zcat >ttrss.sql
+mysql -u root -h $dbip -D ttrss --password="${DBRootPass}" < ttrss.sql
 rm ttrss.sql
 # The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.*
-mysql -u root -h $dbip --password='${DBRootPass}' \
+mysql -u root -h $dbip --password="${DBRootPass}" \
   -e "GRANT ALL PRIVILEGES ON ttrss . * TO '${DBUser}'@'%';"
-mysql -u root -h $dbip --password='${DBRootPass}' \
+mysql -u root -h $dbip --password="${DBRootPass}" \
   -e "FLUSH PRIVILEGES;"
 
 
