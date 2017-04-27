@@ -76,5 +76,5 @@ $DIR/start-updates
 echo Adding cron jobs for db backups to s3 and ssl cert renewal
 (crontab -l 2>/dev/null; \
   cat $DIR/crontab |     \
-  sed "s/rktid/$nginx/g; s/DIR/$DIR/g") | crontab
+  sed "s/rktid/$nginx/g; s~DIR~$DIR~g") | crontab
 echo done
