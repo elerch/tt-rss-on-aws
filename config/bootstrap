@@ -26,6 +26,7 @@ pip2 install ps-mem
 
 rkt fetch --insecure-options=image docker://richarvey/nginx-php-fpm
 rkt fetch --insecure-options=image docker://mariadb
+rkt fetch --insecure-options=image docker://elerch/ttrss-update-daemon
 mkdir /output
 mkdir /data
 $DIR/start-mariadb $DBRootPass
