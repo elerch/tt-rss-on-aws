@@ -18,6 +18,10 @@ Parameters:
     Type: String
   DBPass:
     Type: String
+  Domain:
+    Type: String
+  Email:
+    Type: String
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Default: home-account
@@ -77,9 +81,11 @@ Resources:
           mkdir /config
           # Untar config files and startup script to run after reboot
           echo Copying configuration from s3://${ConfigBackupBucketSlashFile}
-          aws s3 cp s3://${ConfigBackupBucketSlashFile} - | tar --directory=/config xz
+          aws s3 cp s3://${ConfigBackupBucketSlashFile} - | tar --directory=/ xz
           echo Setting up startup service and rebooting
           echo '
+          DOMAIN=${Domain}
+          EMAIL=${Email}
           DatabaseBackupBucketSlashFile=${DatabaseBackupBucketSlashFile}
           ConfigBackupBucketSlashFile=${ConfigBackupBucketSlashFile}
           DBRootPass=${DBRootPass}

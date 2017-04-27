@@ -1,0 +1,18 @@
+#!/bin/sh
+
+user=${1:-"dbuserreplaceme"}
+host=${2:-"dbhostreplaceme"}
+pass=${3:-"dbpassreplaceme"}
+s3location=${4:-"s3locationreplacme"}
+
+# Stop update processing and web site during backup
+mysqldump -u $user             \
+  -h $host                     \
+  --password="${pass}"         \
+  --opt ttrss > ttrss.sql
+
+gzip -f ttrss.sql
+
+[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] && \
+   aws s3 cp ttrss.sql.gz s3://${s3location}
+# Start update processing and web site

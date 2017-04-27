@@ -1,6 +1,2 @@
 #!/bin/sh
-aws s3 cp reader_daemon s3://ttrss/reader_daemon
-aws s3 cp ssl.conf s3://ttrss/ssl.conf
-aws s3 cp config.php s3://ttrss/config.php
-aws s3 cp reduce_memory.conf s3://ttrss/reduce_memory.conf
-aws s3 cp 00-base.conf s3://ttrss/00-base.conf
+tar -cz config | aws s3 cp - s3://ttrss/configs-and-scripts.tgz

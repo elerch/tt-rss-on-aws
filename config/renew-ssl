@@ -1,0 +1,4 @@
+#!/bin/sh
+
+nginx=$1 # We should be passed the container id needed for this operation
+rkt enter $nginx /usr/bin/letsencrypt-renew

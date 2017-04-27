@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # This will run as root
 # $1 will be the path of the file containing needed parameters
 # This script will run at every boot, so it is important to exit before
@@ -9,10 +9,13 @@ date > /bootstrap-completed
 # Source our important environment variables
 source $1
 
+echo DOMAIN=$DOMAIN
+echo EMAIL=$EMAIL
 echo DBRootPass=$DBRootPass
 echo DBUser=$DBUser
 echo DBPass=$DBPass
 echo DatabaseBackupBucketSlashFile=$DatabaseBackupBucketSlashFile
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # For diagnostics/ssh etc
 # ps-mem (for looking at memory utilization beyond ps)
@@ -24,24 +27,38 @@ pip2 install ps-mem
 rkt fetch --insecure-options=image docker://richarvey/nginx-php-fpm
 rkt fetch --insecure-options=image docker://mariadb
 mkdir /output
-mariadb=$(rkt prepare docker://mariadb           \
-  --set-env MYSQL_ROOT_PASSWORD=$DBRootPass      \
-  --volume conf,kind=host,source=/config/mariadb \
-  --mount volume=conf,target=/etc/mysql/conf.d)
-nohup rkt run-prepared $mariadb  >output/mariadb.out &
+mkdir /data
+$DIR/start-mariadb $DBRootPass
 
+# Do some stuff while the DB cranks up for the first time
 pacman -S git --noconfirm
 git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
+
+# ok, now get the critical IP address for the container
 # Git clone should give us plenty of time for the db container to start
 dbip=$(rkt status $mariadb |grep -F networks|cut -d= -f3)
 
 echo Configuring application
-sed -i s/dbhostreplaceme/$dbip/ /var/tt-rss/config.php
-sed -i s/dbuserreplaceme/${DBUser}/ /var/tt-rss/config.php
-sed -i s/dbpassreplaceme/${DBPass}/ /var/tt-rss/config.php
+sed -i "s/dbhostreplaceme/$dbip/g;
+        s/dbuserreplaceme/${DBUser}/g;
+        s/dbpassreplaceme/${DBPass}/g" /var/tt-rss/config.php
+
+sed -i "s/dbhostreplaceme/$dbip/g;
+        s/dbuserreplaceme/${DBUser}/g;
+        s/dbpassreplaceme/${DBPass}/g;
+        s/s3locationreplaceme/${DatabaseBackupBucketSlashFile}/g" $DIR/backup
+
 # TT-RSS permissions
-pushd /var/tt-rss && chmod -R 777 cache/images cache/upload cache/export cache/js feed-icons lock; popd
-# Paper theme\n"
+pushd /var/tt-rss && \
+  chmod -R 777 cache/images \
+               cache/upload \
+               cache/export \
+               cache/js \
+               feed-icons \
+               lock; \
+popd
+
+# Paper theme
 curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | \
   tar xz && \
   mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && \
@@ -63,47 +80,15 @@ mysql -u root -h $dbip --password='${DBRootPass}' \
 mysql -u root -h $dbip --password='${DBRootPass}' \
   -e "FLUSH PRIVILEGES;"
 
+
 echo Starting up nginx
-nginx=$(rkt prepare \
-  --net=host docker://richarvey/nginx-php-fpm \
-  --set-env=DOMAIN=arch2.emil.club \
-  --set-env=WEBROOT=/var/www/html \
-  --set-env=GIT_EMAIL=emil@lerch.org \
-  --volume www,kind=host,source=/var/tt-rss \
-  --mount volume=conf,target=/var/www/html
-  --dns=host)
+nginx=$($DIR/start-nginx $DOMAIN $EMAIL |tail -1)
 
-nohup rkt run-prepared $nginx > /output/nginx.out &
-sleep 5 # Let things settle a bit
-echo Setting up letsencrypt
-rkt enter $nginx /usr/bin/letsencrypt-setup
-
-##################################################
-## STOPPED HERE!
-##################################################
 echo setting up TT-RSS Update Daemon
-aws s3 cp s3://${ReaderBucketSlashFile} /etc/init.d/reader
-chmod 755 /etc/init.d/reader
-chkconfig reader on
-service reader start
+$DIR/start-updates
+
 echo Adding cron jobs for db backups to s3 and ssl cert renewal
-# DB Backups
-echo "
-  #!/bin/sh
-  service reader stop
-  mysqldump -u ${DBUser} -h $dbip --password='${DBPass}' --opt ttrss > ttrss.sql
-  docker stop mariadb; docker start mariadb # Docker known to leak over time - restart
-  gzip -f ttrss.sql
-  # du command ended up blank - getting chopped in cfn? 
-  [ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] &&  aws s3 cp ttrss.sql.gz
-    s3://${DatabaseBackupBucketSlashFile}
-  service reader start
-  " > /opt/snapshot && chmod 755 /opt/snapshot
-# 11am gmt = 3am Pacific
-(crontab -l 2>/dev/null; echo '0 11 * * * /opt/snapshot') | crontab
-# SSL Certificate renewal
-# Change acmetool response file to switch to webroot technique 
-sed -i s/listen/webroot/ /opt/response.yaml
-(crontab -l 2>/dev/null; echo '0 11 * * * /opt/acmetool reconcile --batch --response-file /opt/response.yaml') | crontab -
-docker start mariadb #memory issues are stopping this container. Restart
+(crontab -l 2>/dev/null; \
+  cat $DIR/crontab |     \
+  sed "s/rktid/$nginx/g; s/DIR/$DIR/g") | crontab
 echo done

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+DBRootPass=${1}
+
+mariadb=$(rkt prepare docker://mariadb           \
+  --set-env MYSQL_ROOT_PASSWORD=$DBRootPass      \
+  --volume data,kind=host,source=/data           \
+  --mount volume=data,target=/var/lib/mysql      \
+  --volume conf,kind=host,source=/config/mariadb \
+  --mount volume=conf,target=/etc/mysql/conf.d)
+nohup rkt run-prepared $mariadb  >output/mariadb.out &
+
+echo $mariadb
