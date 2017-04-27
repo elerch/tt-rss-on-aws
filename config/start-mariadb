@@ -8,6 +8,6 @@ mariadb=$(rkt prepare docker://mariadb           \
   --mount volume=data,target=/var/lib/mysql      \
   --volume conf,kind=host,source=/config/mariadb \
   --mount volume=conf,target=/etc/mysql/conf.d)
-nohup rkt run-prepared $mariadb  >output/mariadb.out &
+nohup rkt run-prepared $mariadb  >/output/mariadb.out &
 
 echo $mariadb
