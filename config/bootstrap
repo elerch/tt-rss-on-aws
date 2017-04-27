@@ -32,7 +32,7 @@ $DIR/start-mariadb $DBRootPass
 
 # Do some stuff while the DB cranks up for the first time
 pacman -S git --noconfirm
-git clone --depth 1 https://tt-rss.org/git/tt-rss.git /var/tt-rss
+$DIR/pull-ttrss /var/tt-rss
 
 # ok, now get the critical IP address for the container
 # Git clone should give us plenty of time for the db container to start
@@ -47,22 +47,6 @@ sed -i "s/dbhostreplaceme/$dbip/g;
         s/dbuserreplaceme/${DBUser}/g;
         s/dbpassreplaceme/${DBPass}/g;
         s/s3locationreplaceme/${DatabaseBackupBucketSlashFile}/g" $DIR/backup
-
-# TT-RSS permissions
-pushd /var/tt-rss && \
-  chmod -R 777 cache/images \
-               cache/upload \
-               cache/export \
-               cache/js \
-               feed-icons \
-               lock; \
-popd
-
-# Paper theme
-curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | \
-  tar xz && \
-  mv -f tt-rss-theme-paper-master/* /var/tt-rss/themes/ && \
-  rm -rf tt-rss-theme-paper-master/
 
 echo Loading and configuring database
 mysql -u root -h $dbip --password='${DBRootPass}' \
