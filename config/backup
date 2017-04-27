@@ -3,7 +3,7 @@
 user=${1:-"dbuserreplaceme"}
 host=${2:-"dbhostreplaceme"}
 pass=${3:-"dbpassreplaceme"}
-s3location=${4:-"s3locationreplacme"}
+s3location=${4:-"s3locationreplaceme"}
 
 # Stop update processing and web site during backup
 mysqldump -u $user             \
