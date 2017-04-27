@@ -18,10 +18,10 @@ echo DatabaseBackupBucketSlashFile=$DatabaseBackupBucketSlashFile
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # For diagnostics/ssh etc
-# ps-mem (for looking at memory utilization beyond ps)
 # rxvt-unicode-terminfo for ability to use the terminal over ssh from rxvt
 # mariadb-clients lets us log into our db and bulk export, etc
-pacman -S ps-mem rxvt-unicode-terminfo mariadb-clients --noconfirm
+pacman -S rxvt-unicode-terminfo mariadb-clients --noconfirm
+# ps-mem (for looking at memory utilization beyond ps)
 pip2 install ps-mem
 
 rkt fetch --insecure-options=image docker://richarvey/nginx-php-fpm
