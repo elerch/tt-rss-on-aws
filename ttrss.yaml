@@ -72,6 +72,8 @@ Resources:
           pacman -S archlinux-keyring --noconfirm
           rm /etc/ssl/certs/ca-certificates.crt # system update may fail without cert removal
           pacman -Syu --noconfirm
+          [ -r /etc/ssl/certs/ca-certificates.crt ] || \
+            ln -s /etc/ca-certificates/extracted/ca-bundle.trust.crt /etc/ssl/certs/ca-certificates.crt
           # Required operational packages:
           # rkt (containers)
           # python2-pip (to install awscli and ps-mem)
