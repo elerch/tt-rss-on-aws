@@ -142,10 +142,6 @@ Resources:
           Resource:
           - !Sub arn:aws:s3:::${DatabaseBackupBucketSlashFile}
           - !Sub arn:aws:s3:::${ConfigBackupBucketSlashFile}
-          - !Sub arn:aws:s3:::${SslConfigBucketSlashFile}
-          - !Sub arn:aws:s3:::${BaseConfigBucketSlashFile}
-          - !Sub arn:aws:s3:::${HttpdConfigBucketSlashFile}
-          - !Sub arn:aws:s3:::${ReaderBucketSlashFile}
         - Effect: Allow
           Action:
           - s3:PutObject
