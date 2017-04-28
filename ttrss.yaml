@@ -153,7 +153,8 @@ Resources:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Path: "/"
-      Roles: !Ref S3Role
+      Roles:
+      - Ref: S3Role
   EIP:
     Type: AWS::EC2::EIPAssociation
     Properties:
