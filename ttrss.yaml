@@ -62,7 +62,8 @@ Resources:
       NetworkInterfaces:
       - AssociatePublicIpAddress: false
         DeviceIndex: '0'
-        GroupSet: !Ref RssSecurityGroup
+        GroupSet:
+        - Ref: RssSecurityGroup
         SubnetId: !Ref PublicSubnet
       UserData: !Base64
         'Fn::Sub': |
