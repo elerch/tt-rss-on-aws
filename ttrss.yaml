@@ -84,7 +84,7 @@ Resources:
           mkdir /config
           # Untar config files and startup script to run after reboot
           echo Copying configuration from s3://${ConfigBackupBucketSlashFile}
-          aws s3 cp s3://${ConfigBackupBucketSlashFile} - | tar --directory=/ xz
+          aws s3 cp s3://${ConfigBackupBucketSlashFile} - | tar xz --directory=/
           echo Setting up startup service and rebooting
           echo '
           DOMAIN=${Domain}
@@ -114,6 +114,12 @@ Resources:
     Properties:
       GroupDescription: Allow HTTPS
       SecurityGroupIngress:
+      # Unfortunately we continue to need HTTP access as the letsencrypt
+      # domain verification will run over that port
+      - CidrIp: 0.0.0.0/0
+        FromPort: '80'
+        ToPort: '80'
+        IpProtocol: TCP
       - CidrIp: 0.0.0.0/0
         FromPort: '443'
         ToPort: '443'
