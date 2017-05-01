@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# This will change the mariadb IP address in the three needed locations:
+# 1. The backup script
+# 2. The application configuration
+#
+# Currently this is a manual utility script for use when/if mariadb
+# needs to be bounced. It is not used for normal operations
+
+# It will also adjust the crontab for the running nginx
+
+ip=${1:-$(rkt status $(rkt list |grep -F running |fgrep -F mariadb |cut -f1) |grep -F networks |cut -d= -f3)}
+old_ip=$(grep -F host /config/backup |head -n1|cut -d\" -f2)
+
+if [ "$ip" != "$old_ip" ]; then
+  echo changing $old_ip to new ip $ip
+  sed -i s/$old_ip/$ip/ /config/backup
+  sed -i s/$old_ip/$ip/ /var/tt-rss/config.php
+  echo please restart other containers now and rerun this script
+  exit
+fi
+
+# Look for running container
+nginx=$(rkt list |grep -F running |grep -F nginx|cut -f1)
+if [ -z "$nginx" ]; then
+  echo Web container not found - nothing to do
+  exit
+fi
+old_web_container=$(crontab -l |grep -F renew-ssl |cut -d " " -f7)
+crontab -l |sed s/$old_web_container/$nginx/ |crontab
+
