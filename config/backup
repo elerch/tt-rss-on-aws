@@ -4,7 +4,6 @@ user=${1:-"dbuserreplaceme"}
 host=${2:-"dbhostreplaceme"}
 pass=${3:-"dbpassreplaceme"}
 s3location=${4:-"s3locationreplaceme"}
-scriptlocation=${5:-"/config"}
 
 # Stop update processing and web site during backup
 # Lots of I/Os (but effective)
@@ -12,27 +11,24 @@ scriptlocation=${5:-"/config"}
 # Determine the pod PID. That spawns a systemd process, which spawns our
 # updater. So we are looking for a child of the child of our pod pid, which
 # will be a php process
-pod_pid=$(ps -uax |grep -F $(rkt list |grep -F running |grep -F ttrss-update-daemon |cut -f 1) | awk '{print $2}')
-updater_pid=$(pgrep -P $(pgrep -P $pod_pid) php)
-kill -s STOP $updater_pid
+pod_pid=$(pgrep -f "$(rkt list |grep -F running |grep -F ttrss-update-daemon |cut -f 1)")
+updater_pid="$(pgrep -P "$(pgrep -P "$pod_pid")" php)"
+kill -s STOP "$updater_pid"
 echo "Stopped PID $updater_pid"
 # Sleep 60 seconds as the updater spawns processes sometimes. This will let them settle out.
 sleep 60
 echo "Backing up DB"
 
 # Run the dump
-mysqldump -u $user             \
-  -h $host                     \
+mysqldump -u "$user"           \
+  -h "$host"                   \
   --password="${pass}"         \
   --opt ttrss > ttrss.sql
 
 gzip -f ttrss.sql
 
-[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] && \
-   aws s3 cp ttrss.sql.gz s3://${s3location}
+[ "$(du -k ttrss.sql.gz | cut -f 1)" -ge 6000 ] && \
+   aws s3 cp ttrss.sql.gz s3://"${s3location}"
 
 echo "Starting updater"
-kill -s CONT $updater_pid
-#rkt gc
-# Start update processing and web site
-#${scriptlocation}/start-updates
+kill -s CONT "$updater_pid"
