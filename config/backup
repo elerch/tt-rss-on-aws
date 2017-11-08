@@ -24,12 +24,12 @@ echo "Backing up DB"
 mysqldump -u $user             \
   -h $host                     \
   --password="${pass}"         \
-  --opt ttrss > /tmp/ttrss.sql
+  --opt ttrss > ttrss.sql
 
-gzip -f /tmp/ttrss.sql
+gzip -f ttrss.sql
 
-[ $(du -k /tmp/ttrss.sql.gz | cut -f 1) -ge 6000 ] && \
-   aws s3 cp /tmp/ttrss.sql.gz s3://${s3location}
+[ $(du -k ttrss.sql.gz | cut -f 1) -ge 6000 ] && \
+   aws s3 cp ttrss.sql.gz s3://${s3location}
 
 echo "Starting updater"
 kill -s CONT $updater_pid
