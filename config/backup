@@ -5,9 +5,6 @@ host=${2:-"dbhostreplaceme"}
 pass=${3:-"dbpassreplaceme"}
 s3location=${4:-"s3locationreplaceme"}
 
-# Stop update processing and web site during backup
-# Lots of I/Os (but effective)
-#rkt stop $(rkt list |grep -F running |grep -F ttrss-update-daemon |cut -f 1)
 # Determine the pod PID. That spawns a systemd process, which spawns our
 # updater. So we are looking for a child of the child of our pod pid, which
 # will be a php process
