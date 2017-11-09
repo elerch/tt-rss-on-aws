@@ -50,6 +50,11 @@ sed -i "s/dbhostreplaceme/$dbip/g;
         s/dbpassreplaceme/${DBPass}/g;
         s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" $DIR/backup
 
+sed -i "s/dbhostreplaceme/$dbip/g;
+        s/dbuserreplaceme/${DBUser}/g;
+        s/dbpassreplaceme/${DBPass}/g;
+        s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" $DIR/maintain-db
+
 echo Loading and configuring database
 mysql -u root -h $dbip --password="${DBRootPass}" \
   -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';"
