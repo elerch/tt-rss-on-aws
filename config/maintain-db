@@ -19,7 +19,7 @@ echo "Cleaning DB"
 mysql --user="$user"           \
   --password="${pass}"         \
   -h "$host"                   \
-  ttrss < maintain.sql
+  ttrss < /config/maintain.sql
 
 # Optimize the db
 mysqlcheck -u "$user" --password="${pass}" -h "$host" \
