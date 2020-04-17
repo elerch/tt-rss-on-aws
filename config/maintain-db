@@ -3,27 +3,26 @@
 user=${1:-"dbuserreplaceme"}
 host=${2:-"dbhostreplaceme"}
 pass=${3:-"dbpassreplaceme"}
+updater=${3:-"containernamereplaceme"}
+dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
 
-# Determine the pod PID. That spawns a systemd process, which spawns our
-# updater. So we are looking for a child of the child of our pod pid, which
-# will be a php process
-pod_pid=$(pgrep -f "$(rkt list |grep -F running |grep -F ttrss-update-daemon |cut -f 1)")
-updater_pid=$(pgrep -P "$(pgrep -P "$pod_pid")" php)
-kill -s STOP "$updater_pid"
-echo "Stopped PID $updater_pid"
+podman stop "$updater"
+echo "Stopped container $updater"
 # Sleep 60 seconds as the updater spawns processes sometimes. This will let them settle out.
 sleep 60
 echo "Cleaning DB"
 
 # Delete unused data
-mysql --user="$user"           \
+podman exec "$host"            \
+  mysql --user="$user"         \
   --password="${pass}"         \
   -h "$host"                   \
-  ttrss < /config/maintain.sql
+  ttrss < "$dir"/maintain.sql
 
 # Optimize the db
-mysqlcheck -u "$user" --password="${pass}" -h "$host" \
+podman exec "$host"                                     \
+  mysqlcheck -u "$user" --password="${pass}" -h "$host" \
   --optimize --databases ttrss
 
 echo "Starting updater"
-kill -s CONT "$updater_pid"
+podman start "$updater"

@@ -1,19 +1,12 @@
 #!/bin/sh
+git clone --depth 1 https://git.tt-rss.org/fox/tt-rss.git "$1"
 
-git clone --depth 1 https://tt-rss.org/fox/tt-rss.git $1
-
-# TT-RSS permissions
-pushd $1 && \
+# TT-RSS permissions: Note that in testing, cache/js did not exist, but that's ok here
+(cd "$1" && \
   chmod -R 777 cache/images \
                cache/upload \
                cache/export \
                cache/js \
                feed-icons \
-               lock; \
-popd
-
-# Paper theme
-curl -sL https://github.com/DarkPreacher/tt-rss-theme-paper/archive/master.tar.gz | \
-  tar xz && \
-  mv -f tt-rss-theme-paper-master/* $1/themes/ && \
-  rm -rf tt-rss-theme-paper-master/
+               lock
+)

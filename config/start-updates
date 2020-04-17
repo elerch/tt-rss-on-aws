@@ -1,10 +1,20 @@
 #!/bin/sh
 
-update=$(rkt prepare                             \
-  --volume ttrss,kind=host,source=/var/tt-rss    \
-  --mount volume=ttrss,target=/var/ttrss         \
-  docker://elerch/ttrss-update-daemon)
+if [ $# -lt 1 ]; then
+  echo "usage: start-updates image-name [network] [container-name]" >&2
+  exit 1
+fi
 
-nohup rkt run-prepared --net=host --dns=host $update > /output/updater.out &
+image="$1"
+network=${2:-ttrss}
+name=${3:-ttrss-updater}
 
-echo $update
+# syntax reminder
+# -v host:container
+podman run -d                    \
+  --restart=always               \
+  --network "$network"           \
+  --name "$name"                 \
+  -e MULTIPROCESS=0              \
+  -v /var/tt-rss:/var/tt-rss     \
+  "$image"

@@ -1,17 +1,23 @@
 #!/bin/sh
 
-DOMAIN=$1
-GIT_EMAIL=$2
+if [ $# -lt 2 ]; then
+  echo "usage: start-nginx image-name [network] [container-name]" >&2
+  exit 1
+fi
 
-nginx=$(rkt prepare                           \
-  --set-env=DOMAIN=$DOMAIN                    \
-  --set-env=GIT_EMAIL=$GIT_EMAIL              \
-  --set-env=WEBROOT=/var/www/html             \
-  --volume www,kind=host,source=/var/tt-rss   \
-  --mount volume=www,target=/var/www/html     \
-  docker://richarvey/nginx-php-fpm )
+image="$1"
+network=${2:-ttrss}
+name=${3:-ttrss-nginx}
+dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
 
-nohup rkt run-prepared --net=host --dns=host $nginx > /output/nginx.out &
-sleep 5 # Let things settle a bit
-rkt enter $nginx /usr/bin/letsencrypt-setup
-echo $nginx
+[ ! -f "$dir"/dhparam.pem ] &&                         \
+  time openssl dhparam -out "$dir"/dhparam.pem 2048
+
+podman run -d                                                \
+  --network "$network"                                       \
+  --name "$name"                                             \
+  -p 443:443                                                 \
+  -v /var/tt-rss:/usr/share/nginx/html:ro                    \
+  -v "$dir"/nginx:/etc/nginx/conf.d:ro                       \
+  -v "$dir"/dhparam.pem:/etc/nginx/dhparam/dhparam.pem:ro    \
+  "$image"

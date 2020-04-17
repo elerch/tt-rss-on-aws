@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ $# -lt 2 ]; then
+  echo "usage: start-php image-name [network] [container-name] [nginx-container]" >&2
+  exit 1
+fi
+
+image="$1"
+network=${2:-ttrss}
+name=${3:-ttrss-php}
+nginx=${4:-"proxycontainerreplaceme"}
+
+# apk add --no-cache icu-dev
+# docker-php-ext-install pdo pdo_mysql intl
+podman run -d                             \
+  --network "$network"                    \
+  --name "$name"                          \
+  -v /var/tt-rss:/var/www/html            \
+  "$image"
+
+# Need to bounce the nginx container for dns changes
+podman exec "$nginx" /usr/sbin/nginx -s reload

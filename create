@@ -1,15 +1,11 @@
 #!/bin/sh
-if [ "$#" -ne 5 ];
-  then echo "usage: create dbuser dbpass dbrootpass domain email"
+if [ "$#" -ne 0 ];
+  then echo "usage: create"
   exit 1
 fi
 
 aws cloudformation create-stack \
-  --stack-name ttrss \
+  --stack-name ttrssal2 \
   --template-body file://ttrss.yaml \
-  --capabilities CAPABILITY_IAM \
-  --parameters ParameterKey=DBUser,ParameterValue=$1 \
-               ParameterKey=DBPass,ParameterValue=$2 \
-               ParameterKey=DBRootPass,ParameterValue=$3 \
-               ParameterKey=Domain,ParameterValue=$4 \
-               ParameterKey=Email,ParameterValue=$5
+  --capabilities CAPABILITY_IAM     \
+  --parameters ParameterKey=SshSecurityGroup,ParameterValue=sg-0bb841b5f19ace45e

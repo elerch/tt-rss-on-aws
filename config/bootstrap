@@ -1,85 +1,113 @@
-#!/bin/bash
+#!/bin/sh
 # This will run as root
-# $1 will be the path of the file containing needed parameters
-# This script will run at every boot, so it is important to exit before
-# re-running (unless we want to run every time)
-[ -f /bootstrap-completed ] && exit 0
-date > /bootstrap-completed
+# $1 will be the path for parameter store
+# This script will run only on first boot
 
-# Source our important environment variables
-source $1
+# Configure AWS command line
 
-echo DOMAIN=$DOMAIN
-echo EMAIL=$EMAIL
-echo DBRootPass=$DBRootPass
-echo DBUser=$DBUser
-echo DBPass=$DBPass
-echo DatabaseBackupBucketSlashFile=$DatabaseBackupBucketSlashFile
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+home=${HOME:-/root}
+mkdir -p "$home/.aws/"
+token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+AWS_DEFAULT_REGION=$(curl -s -H "X-aws-ec2-metadata-token: $token" 169.254.169.254/latest/meta-data/placement/availability-zone)
+AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION%?}
+echo "[default]
+region = $AWS_DEFAULT_REGION" >> "$home/.aws/config"
+export AWS_DEFAULT_REGION
+domain="$(aws ssm get-parameter --with-decryption --name "${1}"/domain --query Parameter.Value --output text)"
+DBRootPass="$(aws ssm get-parameter --with-decryption --name "${1}"/dbrootpass --query Parameter.Value --output text)"
+DBUser="$(aws ssm get-parameter --with-decryption --name "${1}"/dbuser --query Parameter.Value --output text)"
+DBPass="$(aws ssm get-parameter --with-decryption --name "${1}"/dbpass --query Parameter.Value --output text)"
+DatabaseBackupBucketSlashFile="$2"
+CertsBucketSlashFile="$3"
+dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
 
-# For diagnostics/ssh etc
-# rxvt-unicode-terminfo for ability to use the terminal over ssh from rxvt
-# mariadb-clients lets us log into our db and bulk export, etc
-pacman -S rxvt-unicode-terminfo mariadb-clients --noconfirm
-# ps-mem (for looking at memory utilization beyond ps)
-pip2 install ps-mem
+# Remove after Linux kernel 4.19
+sed -i 's/,metacopy=on//' /etc/containers/storage.conf
 
-rkt fetch --insecure-options=image docker://richarvey/nginx-php-fpm
-rkt fetch --insecure-options=image docker://mariadb
-rkt fetch --insecure-options=image docker://elerch/ttrss-update-daemon
+nginx="docker.io/library/nginx:1.17.9-alpine"
+mariadb="docker.io/library/mariadb:10.4.12-bionic"
+php="docker.lerch.org/php-fpm-ttrss:1"
+updater="docker.lerch.org/ttrss-update-daemon:1"
+
+for image in $nginx $mariadb $php $updater; do
+  podman pull $image
+done
+
 mkdir /output
 mkdir /data
-mariadb=$($DIR/start-mariadb $DBRootPass)
+network=ttrss
+containerName="${network}-mariadb"
+updaterName="${network}-updater"
+proxyContainerName="${network}-nginx"
+podman network create $network 2>/dev/null
+# shellcheck disable=SC2016
+echo "$dir/start-mariadb" '$(aws ssm get-parameter --with-decryption --name '"${1}"'/dbrootpass --query Parameter.Value --output text)' $mariadb $network "$containerName" >> /var/log/container.log
+"$dir/start-mariadb" "$DBRootPass" $mariadb $network "$containerName"
 
-# Do some stuff while the DB cranks up for the first time
-pacman -S git --noconfirm
-$DIR/pull-ttrss /var/tt-rss
+# Do some stuff while the DB cranks up for the first time...
 
-# ok, now get the critical IP address for the container
-# Git clone should give us plenty of time for the db container to start
-dbip=$(rkt status $mariadb |grep -F networks|cut -d= -f3)
+# For diagnostics/ssh etc
+# mariadb-clients lets us log into our db and bulk export, etc
+yum install -y mariadb python3
+# ps-mem (for looking at memory utilization beyond ps)
+pip3 install ps-mem
+
+yum install -y git
+"$dir"/pull-ttrss /var/tt-rss
 
 echo Configuring application
-cp $DIR/config.php /var/tt-rss/
-sed -i "s/dbhostreplaceme/$dbip/g;
-        s/dbuserreplaceme/${DBUser}/g;
-        s/dbpassreplaceme/${DBPass}/g" /var/tt-rss/config.php
+cp "$dir"/config.php /var/tt-rss/
 
-sed -i "s/dbhostreplaceme/$dbip/g;
-        s/dbuserreplaceme/${DBUser}/g;
-        s/dbpassreplaceme/${DBPass}/g;
-        s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" $DIR/backup
-
-sed -i "s/dbhostreplaceme/$dbip/g;
-        s/dbuserreplaceme/${DBUser}/g;
-        s/dbpassreplaceme/${DBPass}/g;
-        s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" $DIR/maintain-db
+for file in /var/tt-rss/config.php "$dir"/backup "$dir"/maintain-db "$dir"/renew-ssl "$dir"/start-php; do
+  sed -i "s/dbhostreplaceme/${containerName}/g;
+          s/dbuserreplaceme/${DBUser}/g;
+          s/dbpassreplaceme/${DBPass}/g;
+          s/containernamereplaceme/${updaterName}/g;
+          s/proxycontainerreplaceme/${proxyContainerName}/g;
+          s~certlocationreplaceme~${CertsBucketSlashFile}~g;
+          s~s3locationreplaceme~${DatabaseBackupBucketSlashFile}~g" "$file"
+done
 
 echo Loading and configuring database
-mysql -u root -h $dbip --password="${DBRootPass}" \
+ip="$(podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName})"
+mysql -u root -h "${ip}" --password="${DBRootPass}" \
   -e "CREATE USER '${DBUser}'@'%' IDENTIFIED BY '${DBPass}';"
-mysql -u root -h $dbip --password="${DBRootPass}" \
+mysql -u root -h "${ip}" --password="${DBRootPass}" \
   -e 'CREATE DATABASE ttrss;'
 # need to create a temporary file as the memory usage was too much
-# for a t2.nano
-aws s3 cp s3://${DatabaseBackupBucketSlashFile} - |zcat >ttrss.sql
-mysql -u root -h $dbip -D ttrss --password="${DBRootPass}" < ttrss.sql
+# for a t3.nano
+aws s3 cp "s3://${DatabaseBackupBucketSlashFile}" - |zcat >ttrss.sql
+mysql -u root -h "${ip}" -D ttrss --password="${DBRootPass}" < ttrss.sql
 rm ttrss.sql
 # The schema is ttrss regardless of the user, so the grant should be hard coded to ttrss.*
-mysql -u root -h $dbip --password="${DBRootPass}" \
+mysql -u root -h "${ip}" --password="${DBRootPass}" \
   -e "GRANT ALL PRIVILEGES ON ttrss . * TO '${DBUser}'@'%';"
-mysql -u root -h $dbip --password="${DBRootPass}" \
+mysql -u root -h "${ip}" --password="${DBRootPass}" \
   -e "FLUSH PRIVILEGES;"
 
+echo Starting up phpfpm
+containerName="${network}-phpfpm"
+echo "$dir/start-php" "$php" $network $containerName >> /var/log/container.log
+"$dir/start-php" "$php" $network $containerName
 
-echo Starting up nginx
-nginx=$($DIR/start-nginx $DOMAIN $EMAIL |tail -1)
+echo Getting initial certs in place
+echo "$dir"/renew-ssl "${proxyContainerName}" "${CertsBucketSlashFile}" >> /var/log/renewssl.log
+"$dir"/renew-ssl "${proxyContainerName}" "${CertsBucketSlashFile}"
+
+echo Configuring/Starting up nginx
+sed -i "s/replaceme_server_name/${domain}/g;
+        s/replaceme_container_name/${containerName}/g" "$dir"/nginx/default.conf
+
+containerName="${proxyContainerName}"
+echo "$dir/start-nginx" "$nginx" $network $containerName >> /var/log/container.log
+"$dir/start-nginx" "$nginx" $network $containerName
 
 echo setting up TT-RSS Update Daemon
-$DIR/start-updates
+containerName="${updaterName}"
+echo "$dir/start-updates" $updater $network $containerName >> /var/log/container.log
+"$dir/start-updates" $updater $network $containerName
 
 echo Adding cron jobs for db backups to s3 and ssl cert renewal
 (crontab -l 2>/dev/null; \
-  cat $DIR/crontab |     \
-  sed "s/rktid/$nginx/g; s~DIR~$DIR~g") | crontab
-echo done
+  sed "s~DIR~$dir~g" < "$dir"/crontab) | crontab
+echo "done"

@@ -1,13 +1,23 @@
 #!/bin/sh
 
+if [ $# -lt 2 ]; then
+  echo "usage: start-mariadb root-password image-name [network] [container-name]" >&2
+  exit 1
+fi
+
 DBRootPass=${1}
+image="$2"
+network=${3:-ttrss}
+name=${4:-ttrss-mariadb}
 
-mariadb=$(rkt prepare docker://mariadb           \
-  --set-env MYSQL_ROOT_PASSWORD=$DBRootPass      \
-  --volume data,kind=host,source=/data           \
-  --mount volume=data,target=/var/lib/mysql      \
-  --volume conf,kind=host,source=/config/mariadb \
-  --mount volume=conf,target=/etc/mysql/conf.d)
-nohup rkt run-prepared $mariadb  >/output/mariadb.out &
+dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
 
-echo $mariadb
+# syntax reminder
+# -v host:container
+podman run -d                             \
+  -e MYSQL_ROOT_PASSWORD="$DBRootPass"    \
+  --network "$network"                    \
+  --name "$name"                          \
+  -v /data:/var/lib/mysql                 \
+  -v "$dir"/mariadb:/etc/mysql/conf.d:ro \
+  "$image"

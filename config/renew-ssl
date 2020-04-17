@@ -1,4 +1,16 @@
 #!/bin/sh
 
-nginx=$1 # We should be passed the container id needed for this operation
-rkt enter $nginx /usr/bin/letsencrypt-renew
+nginx=${1:-"proxycontainerreplaceme"}
+certlocation=${2:-"certlocationreplaceme"}
+
+dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
+aws s3 cp s3://"$certlocation" "$dir"/certs.tgz
+shasum="$(sha512sum "$dir"/certs.tgz |cut -d\  -f1)"
+[ -f "$dir"/certshash ] && \
+  [ "$shasum" = "$(cat "$dir"/certshash)" ] && \
+  rm "$dir"/certs.tgz && echo "no change to certs - skipping" && exit 0
+
+echo "$shasum" > "$dir"/certshash
+
+[ -f "$dir"/certs.tgz ] && \
+  (cd "$dir" && tar xzf certs.tgz && cp certbak/* nginx/ && podman exec "$nginx" /usr/sbin/nginx -s reload)

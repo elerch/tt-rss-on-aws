@@ -1,6 +1,6 @@
 # 11am gmt = 3am Pacific
 0 11 * * * DIR/backup
 # SSL Certificate renewal
-30 11 * * * DIR/renew-ssl rktid
+30 11 * * * DIR/renew-ssl
 # Maintain DB
 15 10 * * * DIR/maintain-db
