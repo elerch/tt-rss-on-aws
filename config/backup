@@ -6,13 +6,9 @@ pass=${3:-"dbpassreplaceme"}
 updater=${3:-"containernamereplaceme"}
 s3location=${4:-"s3locationreplaceme"}
 
+echo "Stopping container $updater"
 podman stop "$updater"
-echo "Stopped container $updater"
-# Sleeping shouldn't need to be done since we're not planning on the
-# multi-process updater
-# Sleep 60 seconds as the updater spawns processes sometimes. This will let them settle out.
-# sleep 60
-echo "Backing up DB"
+echo "Stopped container $updater. Backing up DB"
 
 # Run the dump. Note the redirection is to podman exec,
 # not mysqldump, so the output will come to the host and the

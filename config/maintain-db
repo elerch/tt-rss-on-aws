@@ -6,11 +6,9 @@ pass=${3:-"dbpassreplaceme"}
 updater=${3:-"containernamereplaceme"}
 dir=$(dirname "$(readlink -f -- "$0")") # GNU readlink - Linux only
 
+echo "Stopping container $updater"
 podman stop "$updater"
-echo "Stopped container $updater"
-# Sleep 60 seconds as the updater spawns processes sometimes. This will let them settle out.
-sleep 60
-echo "Cleaning DB"
+echo "Stopped container $updater. Cleaning DB"
 
 # Delete unused data
 podman exec "$host"            \
